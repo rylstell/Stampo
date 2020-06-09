@@ -1,10 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QTextEdit,
-                             QPlainTextEdit)
-
-
-
+                             QPlainTextEdit, QCheckBox)
 
 
 
@@ -59,25 +56,23 @@ class Time(object):
 
 
 
-
-
-
 class Model(object):
 
-    def calc_time_stamps(self, input):
+    def calc_time_stamps(self, input, preserve_text):
         time_stamps = [Time()]
+        output = ""
         for line in input.split("\n"):
-            time = self.extract_time(line)
+            line = line.strip()
+            i = line.rfind(" ") + 1
+            time = Time.from_str(line[i:])
             if time:
                 time += time_stamps[-1]
                 time_stamps.append(time)
-        return "\n".join([str(t) for t in time_stamps])
-
-    def extract_time(self, line):
-        return Time.from_str(line[line.rfind(" ")+1:])
-
-
-
+                if preserve_text:
+                    output += line[:i] + str(time_stamps[-1]) + "\n"
+                else:
+                    output += str(time_stamps[-1]) + "\n"
+        return output
 
 
 
@@ -94,12 +89,9 @@ class Controller(object):
 
     def calc_btn_handler(self):
         input = self.view.get_input_text()
-        ouput = self.model.calc_time_stamps(input)
-        self.view.set_output_text(ouput)
-
-
-
-
+        preserve_text = self.view.get_preserve_text_state()
+        output = self.model.calc_time_stamps(input, preserve_text)
+        self.view.set_output_text(output)
 
 
 
@@ -123,6 +115,8 @@ class View(QMainWindow):
         self.output_text = QPlainTextEdit(parent=self.central_widget)
         self.output_text.setReadOnly(True)
 
+        self.preserve_checkbox = QCheckBox("perserve text", parent=self.central_widget)
+
         self.calc_btn = QPushButton("Calculate", parent=self.central_widget)
 
         self.vlayout1.addWidget(self.input_label)
@@ -135,6 +129,7 @@ class View(QMainWindow):
         self.hlayout.addLayout(self.vlayout2)
 
         self.main_vlayout.addLayout(self.hlayout)
+        self.main_vlayout.addWidget(self.preserve_checkbox)
         self.main_vlayout.addWidget(self.calc_btn)
 
         self.central_widget.setLayout(self.main_vlayout)
@@ -146,13 +141,12 @@ class View(QMainWindow):
     def get_input_text(self):
         return self.input_text.toPlainText()
 
+    def get_preserve_text_state(self):
+        return self.preserve_checkbox.isChecked()
+
     def set_output_text(self, text):
         self.output_text.setPlainText(text)
         self.output_text.repaint()
-
-
-
-
 
 
 
