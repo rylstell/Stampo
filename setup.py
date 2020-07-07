@@ -1,7 +1,8 @@
 from setuptools import setup
 
-APP = ["stampo.py"]
 NAME = "Stampo"
+
+APP = ["stampo.py"]
 
 OPTIONS = {
     "iconfile": "images/stampo_icon.icns"

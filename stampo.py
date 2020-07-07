@@ -68,10 +68,9 @@ class Model(object):
             if time:
                 time += time_stamps[-1]
                 time_stamps.append(time)
-                if preserve_text:
-                    output += line[:i] + str(time_stamps[-1]) + "\n"
-                else:
-                    output += str(time_stamps[-1]) + "\n"
+                time_stamp = str(time_stamps[-2])
+                line_start = line[:i] if preserve_text else ""
+                output += line_start + time_stamp + "\n"
         return output
 
 
