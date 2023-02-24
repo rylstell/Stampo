@@ -1,96 +1,99 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QTextEdit,
-                             QPlainTextEdit, QCheckBox)
+                             QPlainTextEdit, QCheckBox, QStatusBar)
 
 
 
-class Time(object):
 
-    def __init__(self, sec=0, min=0, hour=0):
-        self.sec = sec
-        self.min = min
-        self.hour = hour
+class InvalidTimeFormat(Exception):
+    ...
+
+
+
+class Time:
+
+    def __init__(self, hours=0, minutes=0, seconds=0):
+        self.hours = hours
+        self.minutes = minutes
+        self.seconds = seconds
 
     def __str__(self):
-        if self.hour:
-            ts = str(self.sec).rjust(2, "0")
-            tm = str(self.min).rjust(2, "0")
-            th = str(self.hour)
-            return f"{th}:{tm}:{ts}"
-        elif self.min:
-            ts = str(self.sec).rjust(2, "0")
-            tm = str(self.min)
-            return f"{tm}:{ts}"
+        if self.hours:
+            return f"{self.hours}:{self.minutes:0>2}:{self.seconds:0>2}"
+        elif self.minutes:
+            return f"{self.minutes}:{self.seconds:0>2}"
         else:
-            ts = str(self.sec).rjust(2, "0")
-            return f"0:{ts}"
+            return f"0:{self.seconds:0>2}"
 
     def __add__(self, other):
-        new = Time()
-        new.sec = self.sec + other.sec
-        new.min = self.min + other.min
-        new.hour = self.hour + other.hour
-        if new.sec > 59:
-            new.sec = new.sec - 60
-            new.min += 1
-        if new.min > 59:
-            new.min = new.min - 60
-            new.hour += 1
-        return new
+        ret = Time()
+        minutes, ret.seconds = divmod(self.seconds + other.seconds, 60)
+        hours, ret.minutes = divmod(self.minutes + other.minutes + minutes, 60)
+        ret.hours = self.hours + other.hours + hours
+        return ret
 
     @classmethod
-    def from_str(cls, s):
+    def from_str(cls, strtime):
         try:
-            sp = s.split(":")
-            new = cls()
-            new.sec = int(sp[-1])
+            ret = cls()
+            sp = strtime.split(":")
+            ret.seconds = int(sp[-1])
             if len(sp) > 1:
-                new.min = int(sp[-2])
+                ret.minutes = int(sp[-2])
             if len(sp) > 2:
-                new.hour = int(sp[-3])
-            return new
+                ret.hours = int(sp[-3])
+            return ret
         except:
-            return None
+            raise InvalidTimeFormat
 
 
 
 
-class Model(object):
+class Model:
 
-    def calc_time_stamps(self, input, preserve_text):
+    def calc_time_stamps(self, text, preserve_text):
+        text = text.strip()
         time_stamps = [Time()]
         output = ""
-        for line in input.split("\n"):
+        for line in text.split("\n"):
             line = line.strip()
-            i = line.rfind(" ") + 1
-            time = Time.from_str(line[i:])
-            if time:
-                time += time_stamps[-1]
-                time_stamps.append(time)
-                time_stamp = str(time_stamps[-2])
-                line_start = line[:i] if preserve_text else ""
-                output += line_start + time_stamp + "\n"
+            time_i = line.rfind(" ") + 1
+            strtime = line[time_i:]
+            time = Time.from_str(strtime)
+            time += time_stamps[-1]
+            time_stamps.append(time)
+            time_stamp = str(time_stamps[-2])
+            if preserve_text:
+                time_stamp = line[:time_i] + time_stamp
+            output += time_stamp + "\n"
         return output
 
 
 
 
-class Controller(object):
+class Controller:
 
     def __init__(self, model, view):
         self.model = model
         self.view = view
-        self.view.connect_calc_btn(self.calc_btn_handler)
+        self.view.calc_btn.clicked.connect(self.calc_btn_handler)
 
     def start(self):
         self.view.show()
 
     def calc_btn_handler(self):
-        input = self.view.get_input_text()
+        text = self.view.get_input_text()
         preserve_text = self.view.get_preserve_text_state()
-        output = self.model.calc_time_stamps(input, preserve_text)
-        self.view.set_output_text(output)
+        try:
+            output = self.model.calc_time_stamps(text, preserve_text)
+        except InvalidTimeFormat:
+            self.view.status_bar.showMessage("Invalid time format")
+        except:
+            self.view.status_bar.showMessage("An unknown error occurred")
+        else:
+            self.view.status_bar.clearMessage()
+            self.view.set_output_text(output)
 
 
 
@@ -100,42 +103,38 @@ class View(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
         self.setWindowTitle("Stampo")
-        self.central_widget = QWidget(parent=self)
-        self.main_vlayout = QVBoxLayout(self.central_widget)
-        self.hlayout = QHBoxLayout()
-        self.vlayout1 = QVBoxLayout()
-        self.vlayout2 = QVBoxLayout()
+        self.status_bar = QStatusBar(self)
 
+        self.central_widget = QWidget(parent=self)
         self.input_label = QLabel("Input song lengths:", parent=self.central_widget)
         self.output_label = QLabel("Output:", parent=self.central_widget)
-
         self.input_text = QPlainTextEdit(parent=self.central_widget)
-
         self.output_text = QPlainTextEdit(parent=self.central_widget)
-        self.output_text.setReadOnly(True)
-
-        self.preserve_checkbox = QCheckBox("perserve text", parent=self.central_widget)
-
+        self.preserve_checkbox = QCheckBox("Preserve text", parent=self.central_widget)
         self.calc_btn = QPushButton("Calculate", parent=self.central_widget)
 
-        self.vlayout1.addWidget(self.input_label)
-        self.vlayout1.addWidget(self.input_text)
+        self.output_text.setReadOnly(True)
 
-        self.vlayout2.addWidget(self.output_label)
-        self.vlayout2.addWidget(self.output_text)
+        vlayout1 = QVBoxLayout()
+        vlayout1.addWidget(self.input_label)
+        vlayout1.addWidget(self.input_text)
 
-        self.hlayout.addLayout(self.vlayout1)
-        self.hlayout.addLayout(self.vlayout2)
+        vlayout2 = QVBoxLayout()
+        vlayout2.addWidget(self.output_label)
+        vlayout2.addWidget(self.output_text)
 
-        self.main_vlayout.addLayout(self.hlayout)
-        self.main_vlayout.addWidget(self.preserve_checkbox)
-        self.main_vlayout.addWidget(self.calc_btn)
+        hlayout = QHBoxLayout()
+        hlayout.addLayout(vlayout1)
+        hlayout.addLayout(vlayout2)
 
-        self.central_widget.setLayout(self.main_vlayout)
+        main_vlayout = QVBoxLayout()
+        main_vlayout.addLayout(hlayout)
+        main_vlayout.addWidget(self.preserve_checkbox)
+        main_vlayout.addWidget(self.calc_btn)
+
+        self.setStatusBar(self.status_bar)
+        self.central_widget.setLayout(main_vlayout)
         self.setCentralWidget(self.central_widget)
-
-    def connect_calc_btn(self, func):
-        self.calc_btn.clicked.connect(func)
 
     def get_input_text(self):
         return self.input_text.toPlainText()
@@ -153,9 +152,7 @@ class View(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    model = Model()
-    view = View()
-    controller = Controller(model, view)
+    controller = Controller(Model(), View())
     controller.start()
     sys.exit(app.exec())
 
