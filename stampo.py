@@ -36,7 +36,8 @@ def calc_time_stamps(text, preserve_text):
         td = timedelta_from_str(text[match.start():match.end()])
         running_time += td
         start_i = match.end()
-    new_text.append(text[start_i:])
+    if preserve_text:
+        new_text.append(text[start_i:])
     return "".join(new_text) if preserve_text else "\n".join(new_text)
 
 
