@@ -1,107 +1,50 @@
 import sys
+from datetime import timedelta
+import re
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLabel, QTextEdit,
+                             QHBoxLayout, QPushButton, QLabel,
                              QPlainTextEdit, QCheckBox, QStatusBar)
 
 
 
-
-class InvalidTimeFormat(Exception):
-    ...
-
-
-
-class Time:
-
-    def __init__(self, hours=0, minutes=0, seconds=0):
-        self.hours = hours
-        self.minutes = minutes
-        self.seconds = seconds
-
-    def __str__(self):
-        if self.hours:
-            return f"{self.hours}:{self.minutes:0>2}:{self.seconds:0>2}"
-        elif self.minutes:
-            return f"{self.minutes}:{self.seconds:0>2}"
-        else:
-            return f"0:{self.seconds:0>2}"
-
-    def __add__(self, other):
-        ret = Time()
-        minutes, ret.seconds = divmod(self.seconds + other.seconds, 60)
-        hours, ret.minutes = divmod(self.minutes + other.minutes + minutes, 60)
-        ret.hours = self.hours + other.hours + hours
-        return ret
-
-    @classmethod
-    def from_str(cls, strtime):
-        try:
-            ret = cls()
-            sp = strtime.split(":")
-            ret.seconds = int(sp[-1])
-            if len(sp) > 1:
-                ret.minutes = int(sp[-2])
-            if len(sp) > 2:
-                ret.hours = int(sp[-3])
-            return ret
-        except:
-            raise InvalidTimeFormat
+def timedelta_from_str(strtime):
+    sp = strtime.split(":")
+    seconds = int(sp[-1])
+    minutes = int(sp[-2]) if len(sp) > 1 else 0
+    hours = int(sp[-3]) if len(sp) > 2 else 0
+    t = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+    return t
 
 
 
-
-class Model:
-
-    def calc_time_stamps(self, text, preserve_text):
-        text = text.strip()
-        time_stamps = [Time()]
-        output = ""
-        for line in text.split("\n"):
-            line = line.strip()
-            time_i = line.rfind(" ") + 1
-            strtime = line[time_i:]
-            time = Time.from_str(strtime)
-            time += time_stamps[-1]
-            time_stamps.append(time)
-            time_stamp = str(time_stamps[-2])
-            if preserve_text:
-                time_stamp = line[:time_i] + time_stamp
-            output += time_stamp + "\n"
-        return output
+def timedelta_to_str(td):
+    s = str(td).lstrip("0").lstrip(":")
+    return s[1:] if s[0] == "0" else s
 
 
 
-
-class Controller:
-
-    def __init__(self, model, view):
-        self.model = model
-        self.view = view
-        self.view.calc_btn.clicked.connect(self.calc_btn_handler)
-
-    def start(self):
-        self.view.show()
-
-    def calc_btn_handler(self):
-        text = self.view.get_input_text()
-        preserve_text = self.view.get_preserve_text_state()
-        try:
-            output = self.model.calc_time_stamps(text, preserve_text)
-        except InvalidTimeFormat:
-            self.view.status_bar.showMessage("Invalid time format")
-        except:
-            self.view.status_bar.showMessage("An unknown error occurred")
-        else:
-            self.view.status_bar.clearMessage()
-            self.view.set_output_text(output)
-
+def calc_time_stamps(text, preserve_text):
+    # TODO: regex only accepts mm:ss and not hh:mm:ss
+    new_text = []
+    running_time = timedelta()
+    start_i = 0
+    pattern = "[0-5]?\d:[0-5]\d"
+    for match in re.finditer(pattern, text):
+        if preserve_text:
+            new_text.append(text[start_i:match.start()])
+        new_text.append(timedelta_to_str(running_time))
+        td = timedelta_from_str(text[match.start():match.end()])
+        running_time += td
+        start_i = match.end()
+    new_text.append(text[start_i:])
+    return "".join(new_text) if preserve_text else "\n".join(new_text)
 
 
 
 class View(QMainWindow):
 
     def __init__(self):
-        QMainWindow.__init__(self)
+        super().__init__()
         self.setWindowTitle("Stampo")
         self.status_bar = QStatusBar(self)
 
@@ -114,6 +57,7 @@ class View(QMainWindow):
         self.calc_btn = QPushButton("Calculate", parent=self.central_widget)
 
         self.output_text.setReadOnly(True)
+        self.calc_btn.clicked.connect(self.calc_btn_handler)
 
         vlayout1 = QVBoxLayout()
         vlayout1.addWidget(self.input_label)
@@ -136,27 +80,22 @@ class View(QMainWindow):
         self.central_widget.setLayout(main_vlayout)
         self.setCentralWidget(self.central_widget)
 
-    def get_input_text(self):
-        return self.input_text.toPlainText()
-
-    def get_preserve_text_state(self):
-        return self.preserve_checkbox.isChecked()
-
-    def set_output_text(self, text):
-        self.output_text.setPlainText(text)
-        self.output_text.repaint()
-
-
-
-
-
-def main():
-    app = QApplication(sys.argv)
-    controller = Controller(Model(), View())
-    controller.start()
-    sys.exit(app.exec())
+    def calc_btn_handler(self):
+        text = self.input_text.toPlainText()
+        preserve_text = self.preserve_checkbox.isChecked()
+        try:
+             output = calc_time_stamps(text, preserve_text)
+        except:
+            self.status_bar.showMessage("An unknown error occurred")
+        else:
+            self.status_bar.clearMessage()
+            self.output_text.setPlainText(output)
+            self.output_text.repaint()
 
 
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    view = View()
+    view.show()
+    sys.exit(app.exec())
